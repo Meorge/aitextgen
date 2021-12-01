@@ -581,6 +581,7 @@ class aitextgen:
         progress_bar_refresh_rate: int = 20,
         freeze_layers: bool = False,
         num_layers_freeze: int = None,
+        custom_callbacks: dict = {},
         **kwargs,
     ) -> None:
 
@@ -667,6 +668,7 @@ class aitextgen:
                 save_gdrive,
                 avg_loss_smoothing,
                 is_gpu_used,
+                custom_callbacks
             )
         )
 

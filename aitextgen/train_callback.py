@@ -23,6 +23,7 @@ class ATGProgressCallback(TrainerCallback):
         save_gdrive,
         avg_loss_smoothing,
         is_gpu_used,
+        custom_callbacks
     ):
         self.training_bar = None
         self.model = model
@@ -39,6 +40,7 @@ class ATGProgressCallback(TrainerCallback):
         self.steps = 0
         self.current_loss = None
         self.prev_avg_loss = None
+        self.custom_callbacks = custom_callbacks
 
     @property
     def save_every_check(self):
@@ -54,17 +56,22 @@ class ATGProgressCallback(TrainerCallback):
                 file=sys.stdout,
             )
 
+        self.custom_callbacks.get('on_train_begin', lambda: None)()
+
     def on_train_end(self, args, state, control, **kwargs):
         if state.is_local_process_zero:
             self.training_bar.close()
             self.training_bar = None
 
+        self.custom_callbacks.get('on_train_end', lambda: None)()
+
     def on_evaluate(self, args, state, control, metrics, **kwargs):
+        print(f'''on_evaluate called: train_loss={metrics.get('train_loss')}''')
         if state.is_local_process_zero:
             self.current_loss = float(metrics.get("train_loss"))
 
     def on_step_end(self, args, state, control, **kwargs):
-
+        print(f'on_step_end called\nargs={args}\nstate={state}\ncontrol={control}\nkwargs={kwargs}\n=====')
         if state.is_local_process_zero:
             self.steps += 1
             avg_loss = 0
@@ -99,6 +106,8 @@ class ATGProgressCallback(TrainerCallback):
                 self.training_bar.update(self.refresh_rate)
                 if self.current_loss:
                     self.training_bar.set_description(desc)
+
+            self.custom_callbacks.get('on_step_end', lambda steps, max, curr, avg, trainer: None)(self.steps, state.max_steps, self.current_loss, avg_loss, self.trainer)
 
             if self.save_every > 0 and self.steps % self.save_every == 0:
                 self.save_pytorch_model()
@@ -138,6 +147,8 @@ class ATGProgressCallback(TrainerCallback):
 
         self.training_bar.write("=" * 10)
 
+        self.custom_callbacks.get('on_sample_text_generated', lambda texts: None)(gen_texts)
+
     def save_pytorch_model(self):
         # only runs on state.is_local_process_zero
         self.training_bar.write(
@@ -153,6 +164,8 @@ class ATGProgressCallback(TrainerCallback):
                     os.path.join(self.output_dir, pt_file),
                     os.path.join("/content/drive/My Drive/", self.run_id, pt_file),
                 )
+
+        self.custom_callbacks.get('on_model_saved', lambda curr, out: None)(self.steps, self.output_dir)
 
     def average_loss(self, current_loss, prev_avg_loss, smoothing):
         if prev_avg_loss is None:
